@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import os
+import random
 import re
 import sys
 import subprocess
@@ -73,7 +74,10 @@ def _get_license_server_url() -> str:
                 j = json.load(f)
             u = (j.get("license_server") or "").strip()
             if u:
-                return u.rstrip("/")
+                u = u.rstrip("/")
+                if u and not u.startswith(("http://", "https://")):
+                    u = "https://" + u
+                return u
         except Exception:
             pass
     return ""
@@ -108,10 +112,16 @@ def validate_key(key: str) -> tuple[bool, str, str | None]:
     if not key or not isinstance(key, str):
         return False, "", None
     key = key.strip().replace(" ", "").replace("-", "").upper()
-    m = re.match(r"^RZ(D|W|M)(\d{8})([A-F0-9]{8})([A-F0-9]{12})$", key)
-    if not m:
-        return False, "", None
-    kt, date_str, mid_key, sig = m.group(1), m.group(2), m.group(3), m.group(4)
+    m = re.match(r"^RZ(D|W|M)(\d{8})([A-F0-9]{4})([A-F0-9]{8})([A-F0-9]{12})$", key)
+    if m:
+        kt, date_str, rnd, mid_key, sig = m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
+        payload = kt + date_str + rnd + mid_key
+    else:
+        m = re.match(r"^RZ(D|W|M)(\d{8})([A-F0-9]{8})([A-F0-9]{12})$", key)
+        if not m:
+            return False, "", None
+        kt, date_str, mid_key, sig = m.group(1), m.group(2), m.group(3), m.group(4)
+        payload = kt + date_str + mid_key
     mid_actual = get_machine_id_hash()
     if mid_key != "00000000":
         if mid_key != mid_actual:
@@ -121,7 +131,6 @@ def validate_key(key: str) -> tuple[bool, str, str | None]:
         if not ok or not exp:
             return False, "", None
         return True, kt, exp
-    payload = kt + date_str + mid_key
     if not hmac.compare_digest(_hash_sig(payload), sig):
         return False, "", None
     try:
@@ -216,8 +225,9 @@ def require_license(prompt_fn, on_error=None, max_attempts: int = 5) -> bool:
 
 
 def generate_key(key_type: str, date_str: str, machine_id_hash: str) -> str:
-    """Tao key (chi admin). machine_id_hash = Machine ID 8 ky tu tu app khach."""
+    """Tao key (chi admin). Moi lan goi tao key khac nhau (random 4 hex)."""
     mid = machine_id_hash.upper()
-    payload = key_type + date_str + mid
+    rnd = "".join(random.choices("0123456789ABCDEF", k=4))
+    payload = key_type + date_str + rnd + mid
     sig = _hash_sig(payload)
-    return f"RZ-{key_type}-{date_str}-{mid}-{sig}"
+    return f"RZ-{key_type}-{date_str}-{rnd}-{mid}-{sig}"
