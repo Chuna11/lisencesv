@@ -242,9 +242,13 @@ def require_license(prompt_fn, on_error=None, max_attempts: int = 5) -> bool:
     return False
 
 
-def generate_key(key_type: str, date_str: str, machine_id_hash: str) -> str:
-    """Tao key (chi admin). Moi lan goi tao key khac nhau (random 4 hex)."""
+def generate_key(key_type: str, date_str: str, machine_id_hash: str, legacy: bool = False) -> str:
+    """Tao key. legacy=True: format cu (hop voi server chua update)."""
     mid = machine_id_hash.upper()
+    if legacy:
+        payload = key_type + date_str + mid
+        sig = _hash_sig(payload)
+        return f"RZ-{key_type}-{date_str}-{mid}-{sig}"
     rnd = "".join(random.choices("0123456789ABCDEF", k=4))
     payload = key_type + date_str + rnd + mid
     sig = _hash_sig(payload)
