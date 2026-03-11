@@ -55,8 +55,8 @@ def _validate_key_internals(parsed, key_norm: str):
     if not parsed or len(parsed) != 4:
         return False, "", None
     kt, date_str, mid_key, sig = parsed
-    if len(key_norm) == 36:
-        rnd = key_norm[12:16]
+    if len(key_norm) == 35:
+        rnd = key_norm[11:15]
         payload = kt + date_str + rnd + mid_key
     else:
         payload = kt + date_str + mid_key
@@ -114,3 +114,4 @@ def activate():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5874))
     app.run(host="0.0.0.0", port=port)
+
