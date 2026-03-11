@@ -11,10 +11,12 @@ import random
 import re
 import sys
 import subprocess
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone, timedelta
 
 _SECRET = (bytes([ord(c) ^ 0x42 for c in base64.b64decode("UlpTdGF0cy1WMi1LZXktVjIwMjU=").decode("latin-1")])).decode("latin-1").encode("utf-8")
+_last_activate_err: str = ""
 
 
 def get_machine_id() -> str:
@@ -83,11 +85,11 @@ def _get_license_server_url() -> str:
     return ""
 
 
-def _activate_server(key: str, machine_id: str) -> tuple[bool, str | None]:
-    """Goi server kich hoat key universal. Tra ve (ok, expires_iso)."""
+def _activate_server(key: str, machine_id: str) -> tuple[bool, str | None, str]:
+    """Goi server kich hoat key universal. Tra ve (ok, expires_iso, error_msg)."""
     url = _get_license_server_url()
     if not url:
-        return False, None
+        return False, None, "Chua cau hinh license_server trong r0.json"
     try:
         req = urllib.request.Request(
             url + "/activate",
@@ -98,10 +100,22 @@ def _activate_server(key: str, machine_id: str) -> tuple[bool, str | None]:
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read().decode())
         if data.get("ok") and data.get("expires"):
-            return True, data["expires"]
-    except Exception:
-        pass
-    return False, None
+            return True, data["expires"], ""
+        return False, None, data.get("msg", "error")
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode()
+            data = json.loads(body)
+            msg = data.get("msg", str(e.code))
+        except Exception:
+            msg = str(e.code)
+        if "already_bound" in str(msg):
+            return False, None, "Key da dung tren may khac, khong the dung may nay."
+        if "expired" in str(msg):
+            return False, None, "Key het han."
+        return False, None, f"Server: {msg}"
+    except Exception as e:
+        return False, None, f"Khong ket noi duoc server (kiem tra mang, URL): {e!r}"
 
 
 def validate_key(key: str) -> tuple[bool, str, str | None]:
@@ -109,6 +123,8 @@ def validate_key(key: str) -> tuple[bool, str, str | None]:
     Kiem tra key. Tra ve (valid, key_type, expires_iso).
     Dung thoi gian internet; bind machine ID; khong cho sua.
     """
+    global _last_activate_err
+    _last_activate_err = ""
     if not key or not isinstance(key, str):
         return False, "", None
     key = key.strip().replace(" ", "").replace("-", "").upper()
@@ -127,8 +143,9 @@ def validate_key(key: str) -> tuple[bool, str, str | None]:
         if mid_key != mid_actual:
             return False, "", None
     else:
-        ok, exp = _activate_server(key, mid_actual)
+        ok, exp, err = _activate_server(key, mid_actual)
         if not ok or not exp:
+            _last_activate_err = err or "Loi kich hoat"
             return False, "", None
         return True, kt, exp
     if not hmac.compare_digest(_hash_sig(payload), sig):
@@ -220,7 +237,8 @@ def require_license(prompt_fn, on_error=None, max_attempts: int = 5) -> bool:
             save_license_cache(kt, exp)
             return True
         if on_error:
-            on_error("Key khong hop le, het han, hoac khong dung may nay.")
+            msg = _last_activate_err if _last_activate_err else "Key khong hop le, het han, hoac khong dung may nay."
+            on_error(msg)
     return False
 
 
