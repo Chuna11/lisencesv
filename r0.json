@@ -1,0 +1,44 @@
+{
+  "license_server": "http://127.0.0.1:5874",
+  "target_color": {
+    "h_min": 125,
+    "h_max": 165,
+    "s_min": 100,
+    "s_max": 255,
+    "v_min": 100,
+    "v_max": 255
+  },
+  "target_color_2": {
+    "enabled": false,
+    "h_min": 155,
+    "h_max": 179,
+    "s_min": 90,
+    "s_max": 255,
+    "v_min": 95,
+    "v_max": 255
+  },
+  "offset_x": 1,
+  "offset_y": 1,
+  "aim_height": 0.76,
+  "aim_smoothing": 0.6,
+  "aim_speed": 0.65,
+  "fov_radius": 25,
+  "show_fov_overlay": true,
+  "smooth_aim": true,
+  "aim_key": "mouse1",
+  "aim_key_2": "alt",
+  "input_method": "rzctl",
+  "capture_method": "dda",
+  "hw_serial_port": "",
+  "discreet_mode": true,
+  "enabled": true,
+  "target_priority": "closest_largest",
+  "target_hold_frames": 30,
+  "human_strength": 2,
+  "mouse_dpi": 500,
+  "minimize_when_running": true,
+  "group_blobs": [
+    3,
+    3
+  ]
+}
