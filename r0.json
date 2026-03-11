@@ -1,5 +1,5 @@
 {
-  "license_server": "http://127.0.0.1:5874",
+  "license_server": "https://lisencesv-production.up.railway.app",
   "target_color": {
     "h_min": 125,
     "h_max": 165,

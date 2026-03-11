@@ -40,19 +40,26 @@ def _save_db(db):
 def _parse_key(key: str):
     if not key:
         return None
-    k = key.strip().replace(" ", "").replace("-", "").upper()
     import re
+    k = key.strip().replace(" ", "").replace("-", "").upper()
+    m = re.match(r"^RZ(D|W|M)(\d{8})([A-F0-9]{4})([A-F0-9]{8})([A-F0-9]{12})$", k)
+    if m:
+        return m.group(1), m.group(2), m.group(4), m.group(5)  # kt, date, mid, sig (bo rnd)
     m = re.match(r"^RZ(D|W|M)(\d{8})([A-F0-9]{8})([A-F0-9]{12})$", k)
     return m.groups() if m else None
 
 
-def _validate_key_internals(parsed):
+def _validate_key_internals(parsed, key_norm: str):
     """Validate key (ky + ngay), tra ve (ok, kt, expires_iso)."""
     import hmac as hm
     if not parsed or len(parsed) != 4:
         return False, "", None
     kt, date_str, mid_key, sig = parsed
-    payload = kt + date_str + mid_key
+    if len(key_norm) == 36:
+        rnd = key_norm[12:16]
+        payload = kt + date_str + rnd + mid_key
+    else:
+        payload = kt + date_str + mid_key
     if not hm.compare_digest(lk._hash_sig(payload), sig):
         return False, "", None
     try:
@@ -88,10 +95,10 @@ def activate():
         parsed = _parse_key(key)
         if not parsed:
             return jsonify({"ok": False, "msg": "invalid"}), 400
-        ok, kt, expires = _validate_key_internals(parsed)
+        key_norm = key.strip().replace(" ", "").replace("-", "").upper()
+        ok, kt, expires = _validate_key_internals(parsed, key_norm)
         if not ok or not expires:
             return jsonify({"ok": False, "msg": "expired"}), 400
-        key_norm = key.strip().replace(" ", "").replace("-", "").upper()
         db = _load_db()
         bound = db.get(key_norm)
         if bound is None:
