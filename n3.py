@@ -12,6 +12,11 @@ def _capture_mss(left, top, width, height):
         return frame[:, :, :3].copy(order="C")
 
 
+def _align_for_dda(x, size):
+    """Căn vùng DDA theo bội 2 – ổn định hơn, giảm lệch màu."""
+    return (x // 2) * 2, max(4, ((size + 1) // 2) * 2)
+
+
 def _capture_dda(left, top, width, height):
     """Desktop Duplication API – chụp ở tầng GPU, hầu như không bị ứng dụng chặn."""
     try:
@@ -35,10 +40,13 @@ def _capture_dda(left, top, width, height):
         frame = cam.grab(
             region=(left, top, left + width, top + height),
             new_frame_only=False,
-            copy=False,
+            copy=True,
         )
-        if frame is not None and frame.size > 0:
-            return np.ascontiguousarray(frame) if not frame.flags["C_CONTIGUOUS"] else frame
+        if frame is not None and frame.size > 0 and len(frame.shape) >= 3:
+            arr = np.ascontiguousarray(frame[:, :, :3].astype(np.uint8))
+            if arr.size > 0 and arr.shape[0] >= 4 and arr.shape[1] >= 4:
+                if np.mean(arr) > 2:
+                    return arr
     except Exception:
         pass
     return None
@@ -70,13 +78,17 @@ def capture_scan_region(center_x, center_y, fov_radius, capture_method="auto"):
     top = max(0, center_y - size // 2 - extend_top)
     height = size + extend_top
     frame = None
-    if capture_method == "dda":
-        frame = _capture_dda(left, top, size, height)
-        if frame is None:
-            try:
-                frame = _capture_mss(left, top, size, height)
-            except Exception:
-                frame = _capture_pil(left, top, size, height)
+    if capture_method in ("dda", "auto"):
+        l2, w2 = _align_for_dda(left, size)
+        t2, h2 = _align_for_dda(top, height)
+        frame = _capture_dda(l2, t2, w2, h2)
+        if frame is not None:
+            return np.ascontiguousarray(frame), l2, t2
+    if capture_method == "dda" or capture_method == "auto":
+        try:
+            frame = _capture_mss(left, top, size, height)
+        except Exception:
+            frame = None
         if frame is None:
             frame = _capture_pil(left, top, size, height)
     elif capture_method == "pil":
@@ -85,15 +97,6 @@ def capture_scan_region(center_x, center_y, fov_radius, capture_method="auto"):
         try:
             frame = _capture_mss(left, top, size, height)
         except Exception:
-            frame = _capture_pil(left, top, size, height)
-    else:  # auto: DDA trước (khó block), rồi mss, pil
-        frame = _capture_dda(left, top, size, height)
-        if frame is None:
-            try:
-                frame = _capture_mss(left, top, size, height)
-            except Exception:
-                pass
-        if frame is None or (hasattr(frame, 'size') and frame.size == 0):
             frame = _capture_pil(left, top, size, height)
     if frame is None:
         return np.zeros((height, size, 3), dtype=np.uint8), left, top

@@ -4,7 +4,7 @@ from k9 import load_config, save_config
 from p4 import AIM_KEY_OPTIONS
 
 app = Flask(__name__)
-WEB_PORT = 5873
+WEB_PORT = 8000
 
 CONFIG_HTML = """
 <!DOCTYPE html>
@@ -72,7 +72,8 @@ CONFIG_HTML = """
           <option value="2" {% if cfg.human_strength >= 2 %}selected{% endif %}>2 - Rung hơn</option>
         </select>
       </label>
-      <div class="note">Giữ mục tiêu giúp aim không "tụt" khi địch bị khuất trong vài frame ngắn.</div>
+      <label><input type="checkbox" name="pro_style" value="1" {% if cfg.pro_style %}checked{% endif %}> Phong cách pro (ease-in-out, micro-adjust)</label>
+      <div class="note">Pro: chậm đầu/cuối, nhanh giữa, overshoot nhẹ như pro. Giữ mục tiêu giúp aim không tụt khi địch khuất.</div>
     </div>
 
     <div class="group">
@@ -186,10 +187,12 @@ def index():
                 "target_priority": request.form.get("target_priority", old.get("target_priority", "closest")),
                 "target_hold_frames": max(0, int(request.form.get("target_hold_frames", old.get("target_hold_frames", 12)))),
                 "human_strength": int(request.form.get("human_strength", old.get("human_strength", 0))),
+                "pro_style": request.form.get("pro_style") == "1",
                 "mouse_dpi": max(200, min(25600, int(request.form.get("mouse_dpi", old.get("mouse_dpi", 800))))),
             }
             cfg["minimize_when_running"] = old.get("minimize_when_running", False)
             cfg["group_blobs"] = old.get("group_blobs", [3, 3])
+            cfg["license_server"] = old.get("license_server", "")
             save_config(cfg)
             ctx = _parse_form()
             ctx["msg"] = "Đã lưu."

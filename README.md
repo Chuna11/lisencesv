@@ -21,7 +21,7 @@ Chương trình chạy **hoàn toàn nền** – không có cửa sổ, chỉ hi
 Khi chương trình đang chạy:
 
 1. Mở trình duyệt
-2. Truy cập: **http://127.0.0.1:5873**
+2. Truy cập: **http://localhost:8000**
 3. Chỉnh các tham số và nhấn **Lưu cấu hình**
 
 Có thể bật/tắt aim trực tiếp trên trang web (checkbox "Bật aim").

@@ -1,5 +1,4 @@
 {
-  "license_server": "https://lisencesv-production.up.railway.app",
   "target_color": {
     "h_min": 125,
     "h_max": 165,
@@ -18,27 +17,29 @@
     "v_max": 255
   },
   "offset_x": 1,
-  "offset_y": 1,
+  "offset_y": 2,
   "aim_height": 0.76,
-  "aim_smoothing": 0.6,
-  "aim_speed": 0.65,
+  "group_blobs": [
+    3,
+    3
+  ],
+  "aim_smoothing": 0.8,
+  "aim_speed": 1.0,
   "fov_radius": 25,
   "show_fov_overlay": true,
   "smooth_aim": true,
+  "enabled": true,
+  "discreet_mode": true,
+  "minimize_when_running": true,
   "aim_key": "mouse1",
   "aim_key_2": "alt",
   "input_method": "rzctl",
   "capture_method": "dda",
   "hw_serial_port": "",
-  "discreet_mode": true,
-  "enabled": true,
+  "human_strength": 2,
+  "pro_style": true,
   "target_priority": "closest_largest",
   "target_hold_frames": 30,
-  "human_strength": 2,
-  "mouse_dpi": 500,
-  "minimize_when_running": true,
-  "group_blobs": [
-    3,
-    3
-  ]
+  "mouse_dpi": 400,
+  "license_server": "https://lisencesv-production.up.railway.app"
 }

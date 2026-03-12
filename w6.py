@@ -40,9 +40,19 @@ def _move_via_hardware(dx, dy, port=None):
         return False
 
 
-def move_mouse_to(target_x, target_y, offset_x, offset_y, aim_speed, smooth=True, min_move_px=2, input_method="rzctl", hw_serial_port="", human_strength=0, crosshair_center_x=None, crosshair_center_y=None, responsive_mode=False):
+def _pro_ease(dist_ratio):
+    """Ease-in-out giống pro: chậm đầu/cuối, nhanh giữa (minimum jerk)."""
+    if dist_ratio <= 0:
+        return 0.0
+    if dist_ratio >= 1:
+        return 1.0
+    t = dist_ratio
+    return t * t * (3 - 2 * t)
+
+
+def move_mouse_to(target_x, target_y, offset_x, offset_y, aim_speed, smooth=True, min_move_px=2, input_method="rzctl", hw_serial_port="", human_strength=0, crosshair_center_x=None, crosshair_center_y=None, responsive_mode=False, pro_style=False):
     """
-    Di chuyển chuột tới mục tiêu. Game Raw Input: dùng crosshair_center làm gốc (tâm ngắm cố định).
+    Di chuyển chuột tới mục tiêu. pro_style: ease-in-out, micro-overshoot, path curve như pro.
     """
     if target_x is None or target_y is None:
         return
@@ -68,19 +78,37 @@ def move_mouse_to(target_x, target_y, offset_x, offset_y, aim_speed, smooth=True
             base_speed = aim_speed
             if human_strength >= 2:
                 base_speed *= random.uniform(0.75, 1.25)
+            elif pro_style:
+                base_speed *= random.uniform(0.92, 1.08)
             if responsive_mode:
                 if dist < 20:
-                    base_speed = min(base_speed, 0.65)
+                    base_speed = min(base_speed, 0.85)
                 elif dist > 40:
-                    # Khi tâm bị giật xa (recoil) → kéo nhanh về vùng đầu
-                    base_speed = min(2.5, base_speed * 1.4)
-                ease = 0.9 + 0.1 * min(1.0, dist / 30) if dist < 40 else 1.0
-                if dist > 40:
-                    max_step = 24
-                elif dist < 30:
-                    max_step = 8
+                    base_speed = min(2.8, base_speed * 1.5)
+                if pro_style:
+                    dist_ratio = min(1.0, dist / 60)
+                    ease = 0.75 + 0.25 * _pro_ease(dist_ratio)
                 else:
-                    max_step = 14
+                    ease = 0.9 + 0.1 * min(1.0, dist / 30) if dist < 40 else 1.0
+                base_speed *= ease
+                if dist > 40:
+                    max_step = 28
+                elif dist < 30:
+                    max_step = 10 if pro_style else 12
+                else:
+                    max_step = 16 if pro_style else 18
+            elif pro_style:
+                if dist < 15:
+                    base_speed = min(base_speed, 0.5)
+                    max_step = 6
+                elif dist < 40:
+                    base_speed = min(base_speed * 0.9, 0.85)
+                    max_step = 12
+                else:
+                    max_step = 18
+                dist_ratio = min(1.0, dist / 80)
+                ease = 0.7 + 0.3 * _pro_ease(dist_ratio)
+                base_speed *= ease
             else:
                 if dist < 20:
                     base_speed = min(base_speed, 0.42)
@@ -88,7 +116,7 @@ def move_mouse_to(target_x, target_y, offset_x, offset_y, aim_speed, smooth=True
                 if dist < 40:
                     ease = 0.65 + 0.35 * (dist / 40)
                 max_step = 10 if dist < 25 else 18
-            base_speed *= ease
+                base_speed *= ease
             step_x = (final_x - current_x) * base_speed
             step_y = (final_y - current_y) * base_speed
             step_len = math.sqrt(step_x * step_x + step_y * step_y)
@@ -96,14 +124,23 @@ def move_mouse_to(target_x, target_y, offset_x, offset_y, aim_speed, smooth=True
                 f = max_step / step_len
                 step_x *= f
                 step_y *= f
-            if responsive_mode and step_len > 1e-6:
+            if (responsive_mode or pro_style) and step_len > 1e-6:
                 perp_x, perp_y = -step_y, step_x
                 len_perp = math.sqrt(perp_x * perp_x + perp_y * perp_y)
                 if len_perp > 1e-6:
-                    curve = random.uniform(-0.003, 0.003) * dist
+                    curve_amp = 0.002 if pro_style else 0.003
+                    curve = random.uniform(-curve_amp, curve_amp) * dist
                     step_x += perp_x / len_perp * curve
                     step_y += perp_y / len_perp * curve
-            if human_strength > 0:
+            if pro_style and human_strength == 0:
+                jitter = random.uniform(-0.4, 0.4)
+                step_x += jitter
+                step_y += random.uniform(-0.4, 0.4)
+                if random.random() < 0.08 and dist < 25:
+                    overshoot = random.uniform(1.02, 1.06)
+                    step_x *= overshoot
+                    step_y *= overshoot
+            elif human_strength > 0:
                 curve_amp = 0.02 if human_strength < 2 else 0.04
                 perp_x, perp_y = -step_y, step_x
                 len_perp = math.sqrt(perp_x * perp_x + perp_y * perp_y)
@@ -130,6 +167,8 @@ def move_mouse_to(target_x, target_y, offset_x, offset_y, aim_speed, smooth=True
 
         if human_strength >= 2:
             time.sleep(random.uniform(0.0002, 0.001))
+        elif pro_style:
+            time.sleep(random.uniform(0.00005, 0.00025))
 
         ok = False
         if input_method == "hardware" and hw_serial_port:

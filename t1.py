@@ -29,7 +29,8 @@ def detect(
     """
     if frame is None or frame.size == 0:
         return None
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    denoised = cv2.medianBlur(frame, 3)
+    hsv = cv2.cvtColor(denoised, cv2.COLOR_BGR2HSV)
     # Loại đen/xám (chân, bóng): S và V phải đủ cao – glow tím sáng có S,V cao
     s_min = max(s_min, 90)
     v_min = max(v_min, 95)
@@ -46,7 +47,6 @@ def detect(
     yg, xg = np.ogrid[:h, :w]
     circle_mask = ((xg - center_x) ** 2 + (yg - center_y) ** 2) <= (fov_radius ** 2)
     mask = cv2.bitwise_and(mask, np.where(circle_mask, 255, 0).astype(np.uint8))
-    # Unibot: kernel từ group_close_target_blobs, dilation iterations=5, CHAIN_APPROX_NONE
     kx, ky = (3, 3)
     if group_blobs and isinstance(group_blobs, (list, tuple)) and len(group_blobs) >= 2:
         kx, ky = max(1, int(group_blobs[0])), max(1, int(group_blobs[1]))
@@ -60,15 +60,17 @@ def detect(
     priority = (priority or "closest").lower()
     for contour in contours:
         rect_x, rect_y, rect_w, rect_h = cv2.boundingRect(contour)
-        if rect_w < 2 or rect_h < 2:
+        if rect_w < 4 or rect_h < 4:
+            continue
+        area = rect_w * rect_h
+        if area < 35:
             continue
         aim_x = rect_x + rect_w // 2
-        aim_y = int(rect_y + rect_h * (1.0 - aim_height)) + 1  # Unibot: aim_height 0.85 = đầu, +1px xuống
+        frac = (1.0 - aim_height) * 0.80
+        aim_y = int(rect_y + rect_h * frac)
         dist = np.sqrt((aim_x - center_x) ** 2 + (aim_y - center_y) ** 2)
         if dist > fov_radius:
             continue
-
-        area = rect_w * rect_h
         if priority == "largest":
             score = -area
         elif priority == "highest":

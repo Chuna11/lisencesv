@@ -1,6 +1,6 @@
 """
 ColorAim - Unibot only. Phát hiện địch + aim theo https://github.com/vike256/Unibot
-Chạy nền, cấu hình qua web http://127.0.0.1:5873
+Chạy nền, cấu hình qua web http://localhost:8000
 """
 try:
     import setproctitle  # type: ignore[reportMissingImports]
@@ -63,7 +63,7 @@ from w6 import move_mouse_to
 from n3 import capture_scan_region
 from v8 import FOVOverlay
 
-WEB_PORT = 5873
+WEB_PORT = 8000
 VK_DELETE = 0x2E
 
 # Delete toggle: bắt buộc reload config ngay
@@ -175,59 +175,105 @@ def _aim_loop(overlay, hotkey_manager):
                     priority=cfg.get("target_priority", "closest"),
                 )
 
+                using_hold = False
                 if point:
                     raw_x = left + point[0]
                     raw_y = top + point[1]
                     last_target = (raw_x, raw_y)
                     target_hold_frames = int(cfg.get("target_hold_frames", 12))
                 elif last_target and target_hold_frames > 0:
-                    raw_x, raw_y = last_target
-                    target_hold_frames -= 1
-                    point = (raw_x - left, raw_y - top)
+                    lx, ly = last_target
+                    dist_from_target = ((center_x - lx) ** 2 + (center_y - ly) ** 2) ** 0.5
+                    if dist_from_target > fov_radius:
+                        last_target = None
+                        target_hold_frames = 0
+                        point = None
+                    else:
+                        raw_x, raw_y = last_target
+                        target_hold_frames -= 1
+                        point = (raw_x - left, raw_y - top)
+                        using_hold = True
                 else:
                     last_target = None
                     point = None
 
                 if point and hotkey_manager.is_aim_active():
-                    raw_history.append((raw_x, raw_y))
-                    if len(raw_history) > 3:
-                        raw_history.pop(0)
-                    xs = sorted([p[0] for p in raw_history])
-                    ys = sorted([p[1] for p in raw_history])
-                    avg_x, avg_y = xs[len(xs) // 2], ys[len(ys) // 2]
-                    sm = float(cfg.get("aim_smoothing", SMOOTH))
-                    if last_smoothed is None:
-                        tx, ty = avg_x, avg_y
+                    tx = raw_x + cfg.get("offset_x", 0)
+                    ty = raw_y + cfg.get("offset_y", 0)
+                    if using_hold:
+                        d = ((center_x - tx) ** 2 + (center_y - ty) ** 2) ** 0.5
+                        if d < 10:
+                            last_target = None
+                            target_hold_frames = 0
+                            last_smoothed = None
+                            raw_history.clear()
+                        else:
+                            raw_history.append((raw_x, raw_y))
+                            if len(raw_history) > 2:
+                                raw_history.pop(0)
+                            xs = sorted([p[0] for p in raw_history])
+                            ys = sorted([p[1] for p in raw_history])
+                            avg_x, avg_y = xs[len(xs) // 2], ys[len(ys) // 2]
+                            sm = float(cfg.get("aim_smoothing", SMOOTH))
+                            if last_smoothed is None:
+                                txa, tya = avg_x, avg_y
+                            else:
+                                txa = (1 - sm) * last_smoothed[0] + sm * avg_x
+                                tya = (1 - sm) * last_smoothed[1] + sm * avg_y
+                            last_smoothed = (txa, tya)
+                            aim_spd = float(cfg.get("aim_speed", AIM_SPD))
+                            dpi = max(200, int(cfg.get("mouse_dpi", 800)))
+                            aim_spd = aim_spd * (800.0 / dpi)
+                            move_mouse_to(txa, tya, cfg.get("offset_x", 0), cfg.get("offset_y", 0),
+                                aim_spd, cfg.get("smooth_aim", True), min_move_px=1,
+                                input_method=cfg.get("input_method", "rzctl"),
+                                hw_serial_port=cfg.get("hw_serial_port", "").strip(),
+                                human_strength=int(cfg.get("human_strength", 0)),
+                                crosshair_center_x=center_x, crosshair_center_y=center_y,
+                                responsive_mode=True, pro_style=bool(cfg.get("pro_style", True)))
                     else:
-                        tx = (1 - sm) * last_smoothed[0] + sm * avg_x
-                        ty = (1 - sm) * last_smoothed[1] + sm * avg_y
-                    last_smoothed = (tx, ty)
-                    aim_spd = float(cfg.get("aim_speed", AIM_SPD))
-                    dpi = max(200, int(cfg.get("mouse_dpi", 800)))
-                    aim_spd = aim_spd * (800.0 / dpi)
-                    move_mouse_to(
-                        tx, ty,
-                        cfg.get("offset_x", 0), cfg.get("offset_y", 0),
-                        aim_spd,
-                        cfg.get("smooth_aim", True),
-                        min_move_px=2,
-                        input_method=cfg.get("input_method", "rzctl"),
-                        hw_serial_port=cfg.get("hw_serial_port", "").strip(),
-                        human_strength=int(cfg.get("human_strength", 0)),
-                        crosshair_center_x=center_x,
-                        crosshair_center_y=center_y,
-                        responsive_mode=True,
-                    )
+                        raw_history.append((raw_x, raw_y))
+                        if len(raw_history) > 2:
+                            raw_history.pop(0)
+                        xs = sorted([p[0] for p in raw_history])
+                        ys = sorted([p[1] for p in raw_history])
+                        avg_x, avg_y = xs[len(xs) // 2], ys[len(ys) // 2]
+                        sm = float(cfg.get("aim_smoothing", SMOOTH))
+                        if last_smoothed is None:
+                            tx, ty = avg_x, avg_y
+                        else:
+                            tx = (1 - sm) * last_smoothed[0] + sm * avg_x
+                            ty = (1 - sm) * last_smoothed[1] + sm * avg_y
+                        last_smoothed = (tx, ty)
+                        aim_spd = float(cfg.get("aim_speed", AIM_SPD))
+                        dpi = max(200, int(cfg.get("mouse_dpi", 800)))
+                        aim_spd = aim_spd * (800.0 / dpi)
+                        move_mouse_to(
+                            tx, ty,
+                            cfg.get("offset_x", 0), cfg.get("offset_y", 0),
+                            aim_spd,
+                            cfg.get("smooth_aim", True),
+                            min_move_px=1,
+                            input_method=cfg.get("input_method", "rzctl"),
+                            hw_serial_port=cfg.get("hw_serial_port", "").strip(),
+                            human_strength=int(cfg.get("human_strength", 0)),
+                            crosshair_center_x=center_x,
+                            crosshair_center_y=center_y,
+                            responsive_mode=True,
+                            pro_style=bool(cfg.get("pro_style", True)),
+                        )
                 else:
                     last_smoothed = None
                     if not point:
                         raw_history.clear()
             elif enabled and not aim_active:
                 last_smoothed = None
+                last_target = None
+                target_hold_frames = 0
                 raw_history.clear()
 
             if aim_active and enabled:
-                time.sleep(0.002)
+                time.sleep(0.001)
             elif enabled:
                 time.sleep(0.004)
             else:
@@ -269,7 +315,7 @@ def main():
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
-    root.after(500, lambda: print(f"\n>>> Cấu hình: http://127.0.0.1:{WEB_PORT}\n"))
+    root.after(500, lambda: print(f"\n>>> Cấu hình: http://localhost:{WEB_PORT}\n"))
     root.mainloop()
 
 
