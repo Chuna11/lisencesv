@@ -1,7 +1,12 @@
-"""Config - Unibot style"""
+"""Config - Unibot style. r0 duoc ma hoa XOR, khong doc duoc bang mat thuong."""
 import json
 import os
 import sys
+
+_CFG_KEY = b"RzStats-r0-cfg"
+def _enc(b: bytes) -> bytes:
+    k = _CFG_KEY
+    return bytes((x ^ k[i % len(k)]) & 0xFF for i, x in enumerate(b))
 
 
 def _get_base_dir():
@@ -10,7 +15,20 @@ def _get_base_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 
-CONFIG_PATH = os.path.join(_get_base_dir(), "r0.json")
+def _get_config_path():
+    base = _get_base_dir()
+    for name in ("r0", "r0.json"):
+        p = os.path.join(base, name)
+        if os.path.exists(p):
+            return p
+    if getattr(sys, "frozen", False) and getattr(sys, "_MEIPASS", None):
+        p = os.path.join(sys._MEIPASS, "r0.json")
+        if os.path.exists(p):
+            return p
+    return os.path.join(base, "r0")
+
+
+CONFIG_PATH = None  # Set at runtime by load_config
 
 # Valorant Enemy Highlight: Purple (Tritanopia) – glow tím
 # HSV OpenCV: H 125–165 ( tím/magenta), S/V cao để loại đen/xám
@@ -44,15 +62,26 @@ DEFAULT_CONFIG = {
 
 
 def load_config():
+    global CONFIG_PATH
+    if CONFIG_PATH is None:
+        CONFIG_PATH = _get_config_path()
     if os.path.exists(CONFIG_PATH):
         try:
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                return {**DEFAULT_CONFIG, **json.load(f)}
-        except (json.JSONDecodeError, IOError):
+            raw = open(CONFIG_PATH, "rb").read()
+            if CONFIG_PATH.endswith(".json"):
+                s = raw.decode("utf-8")
+            else:
+                s = _enc(raw).decode("utf-8")
+            return {**DEFAULT_CONFIG, **json.loads(s)}
+        except (json.JSONDecodeError, IOError, UnicodeDecodeError):
             pass
     return DEFAULT_CONFIG.copy()
 
 
 def save_config(config):
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
+    global CONFIG_PATH
+    if CONFIG_PATH is None:
+        CONFIG_PATH = _get_config_path()
+    save_path = os.path.join(_get_base_dir(), "r0")
+    data = json.dumps(config, indent=2, ensure_ascii=False).encode("utf-8")
+    open(save_path, "wb").write(_enc(data))

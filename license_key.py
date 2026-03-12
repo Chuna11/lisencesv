@@ -68,20 +68,31 @@ def _get_license_server_url() -> str:
     url = os.environ.get("RZ_LICENSE_SERVER", "").strip()
     if url:
         return url.rstrip("/")
-    base = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
-    p = os.path.join(base, "r0.json")
-    if os.path.exists(p):
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                j = json.load(f)
-            u = (j.get("license_server") or "").strip()
-            if u:
-                u = u.rstrip("/")
-                if u and not u.startswith(("http://", "https://")):
-                    u = "https://" + u
-                return u
-        except Exception:
-            pass
+    _r0_key = b"RzStats-r0-cfg"
+    def _dec(raw):
+        return bytes((b ^ _r0_key[i % 14]) & 0xFF for i, b in enumerate(raw)).decode("utf-8")
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+        cand = [os.path.join(base, "r0"), os.path.join(base, "r0.json")]
+        if getattr(sys, "_MEIPASS", None):
+            cand.append(os.path.join(sys._MEIPASS, "r0.json"))
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+        cand = [os.path.join(base, "r0"), os.path.join(base, "r0.json")]
+    for p in cand:
+        if os.path.exists(p):
+            try:
+                raw = open(p, "rb").read()
+                s = raw.decode("utf-8") if p.endswith(".json") else _dec(raw)
+                j = json.loads(s)
+                u = (j.get("license_server") or "").strip()
+                if u:
+                    u = u.rstrip("/")
+                    if not u.startswith(("http://", "https://")):
+                        u = "https://" + u
+                    return u
+            except Exception:
+                continue
     return ""
 
 
